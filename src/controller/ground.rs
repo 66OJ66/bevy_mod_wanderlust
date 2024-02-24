@@ -231,9 +231,8 @@ pub fn find_ground(
     masses: Query<&ReadMassProperties>,
     globals: Query<&GlobalTransform>,
     colliders: Query<&Collider>,
-
     ctx: Res<RapierContext>,
-    mut gizmos: Gizmos,
+    #[cfg(feature = "debug-lines")] mut gizmos: Gizmos,
 ) {
     let dt = ctx.integration_parameters.dt;
     if time.delta_seconds() == 0.0 {
@@ -272,6 +271,7 @@ pub fn find_ground(
                     caster.max_ground_angle,
                     gravity.up_vector,
                     5,
+                    #[cfg(feature = "debug-lines")]
                     &mut gizmos,
                 )
                 .map(|(entity, cast)| {
@@ -289,7 +289,14 @@ pub fn find_ground(
             viable_ground.update(next_viable_ground);
 
             let next_ground = any_params
-                .cast_iters(&ctx, &globals, gravity.up_vector, 5, &mut gizmos)
+                .cast_iters(
+                    &ctx,
+                    &globals,
+                    gravity.up_vector,
+                    5,
+                    #[cfg(feature = "debug-lines")]
+                    &mut gizmos,
+                )
                 .map(|(entity, cast)| {
                     Ground::from_cast(
                         entity,
@@ -540,10 +547,18 @@ impl<'c, 'f> GroundCastParams<'c, 'f> {
         globals: &Query<&GlobalTransform>,
         up_vector: Vec3,
         iterations: usize,
-        gizmos: &mut Gizmos,
+        #[cfg(feature = "debug-lines")] gizmos: &mut Gizmos,
     ) -> Option<(Entity, CastResult)> {
         for _ in 0..iterations {
-            if let Some((entity, cast)) = self.cast(ctx, globals, up_vector, gizmos) {
+            let cast = self.cast(
+                ctx,
+                globals,
+                up_vector,
+                #[cfg(feature = "debug-lines")]
+                gizmos,
+            );
+
+            if let Some((entity, cast)) = cast {
                 return Some((entity, cast));
             }
         }
@@ -560,12 +575,17 @@ impl<'c, 'f> GroundCastParams<'c, 'f> {
         max_angle: f32,
         up_vector: Vec3,
         iterations: usize,
-        gizmos: &mut Gizmos,
+        #[cfg(feature = "debug-lines")] gizmos: &mut Gizmos,
     ) -> Option<(Entity, CastResult)> {
         for _ in 0..iterations {
-            if let Some((entity, cast)) =
-                self.viable_cast(ctx, globals, up_vector, max_angle, gizmos)
-            {
+            if let Some((entity, cast)) = self.viable_cast(
+                ctx,
+                globals,
+                up_vector,
+                max_angle,
+                #[cfg(feature = "debug-lines")]
+                gizmos,
+            ) {
                 return Some((entity, cast));
             }
         }
@@ -579,17 +599,26 @@ impl<'c, 'f> GroundCastParams<'c, 'f> {
         ctx: &RapierContext,
         globals: &Query<&GlobalTransform>,
         up_vector: Vec3,
-        gizmos: &mut Gizmos,
+        #[cfg(feature = "debug-lines")] gizmos: &mut Gizmos,
     ) -> Option<(Entity, CastResult)> {
         self.correct_penetrations(ctx, globals);
+        let cast_shape = self.cast_shape(
+            ctx,
+            #[cfg(feature = "debug-lines")]
+            gizmos,
+        );
 
-        let (entity, mut cast) = if let Some((entity, cast)) = self.cast_shape(ctx, gizmos) {
+        let (entity, mut cast) = if let Some((entity, cast)) = cast_shape {
             (entity, cast)
         } else if let Some((entity, cast)) = self.cast_ray(ctx) {
             (entity, cast)
         } else {
             return None;
         };
+
+        #[cfg(not(feature = "debug-lines"))]
+        let sampled_normal = self.sample_normals(ctx, cast, up_vector)?;
+        #[cfg(feature = "debug-lines")]
         let sampled_normal = self.sample_normals(ctx, cast, up_vector, gizmos)?;
         cast.normal = sampled_normal;
 
@@ -608,13 +637,19 @@ impl<'c, 'f> GroundCastParams<'c, 'f> {
         globals: &Query<&GlobalTransform>,
         up_vector: Vec3,
         max_angle: f32,
-        gizmos: &mut Gizmos,
+        #[cfg(feature = "debug-lines")] gizmos: &mut Gizmos,
     ) -> Option<(Entity, CastResult)> {
+        #[cfg(not(feature = "debug-lines"))]
+        let (entity, cast) = self.cast(ctx, globals, up_vector)?;
+        #[cfg(feature = "debug-lines")]
         let (entity, cast) = self.cast(ctx, globals, up_vector, gizmos)?;
 
         if cast.viable(up_vector, max_angle) {
             Some((entity, cast))
         } else {
+            #[cfg(not(feature = "debug-lines"))]
+            self.slide(cast, up_vector);
+            #[cfg(feature = "debug-lines")]
             self.slide(cast, up_vector, gizmos);
             None
         }
@@ -643,7 +678,7 @@ impl<'c, 'f> GroundCastParams<'c, 'f> {
     pub fn cast_shape(
         &self,
         ctx: &RapierContext,
-        gizmos: &mut Gizmos,
+        #[cfg(feature = "debug-lines")] gizmos: &mut Gizmos,
     ) -> Option<(Entity, CastResult)> {
         let (entity, toi) = ctx.cast_shape(
             self.position,
@@ -662,7 +697,9 @@ impl<'c, 'f> GroundCastParams<'c, 'f> {
         let (entity, cast) = (entity, CastResult::from_toi1(toi));
         let cast = cast?;
 
+        #[cfg(feature = "debug-lines")]
         gizmos.ray(self.position, self.direction * cast.toi, Color::BLUE);
+        #[cfg(feature = "debug-lines")]
         gizmos.sphere(
             self.position + self.direction * cast.toi,
             self.rotation,
@@ -696,7 +733,12 @@ impl<'c, 'f> GroundCastParams<'c, 'f> {
     /// This is used so the controller doesn't repeatedly fall down
     /// a slope despite there being some viable ground right beneath the
     /// non-viable ground.
-    pub fn slide(&mut self, cast: CastResult, up_vector: Vec3, gizmos: &mut Gizmos) {
+    pub fn slide(
+        &mut self,
+        cast: CastResult,
+        up_vector: Vec3,
+        #[cfg(feature = "debug-lines")] gizmos: &mut Gizmos,
+    ) {
         let projected_position = self.position + self.direction * cast.toi;
         //let offset = cast.point.distance(projected_position);
 
@@ -704,6 +746,7 @@ impl<'c, 'f> GroundCastParams<'c, 'f> {
         self.direction = down_tangent.normalize_or_zero();
         self.position = projected_position;
 
+        #[cfg(feature = "debug-lines")]
         gizmos.ray(cast.point, down_tangent * 0.3, Color::CYAN);
         self.max_toi -= cast.toi;
         //max_toi -= (toi.toi - offset).max(0.0);
@@ -719,7 +762,7 @@ impl<'c, 'f> GroundCastParams<'c, 'f> {
         ctx: &RapierContext,
         cast: CastResult,
         up_vector: Vec3,
-        gizmos: &mut Gizmos,
+        #[cfg(feature = "debug-lines")] gizmos: &mut Gizmos,
     ) -> Option<Vec3> {
         // try to get a better normal rather than an edge interpolated normal.
         // project back onto original shape position
@@ -733,6 +776,7 @@ impl<'c, 'f> GroundCastParams<'c, 'f> {
         // for the closest normal
         let mut sampled = Vec::new();
         let valid_radius = FUDGE * 2.0;
+        #[cfg(feature = "debug-lines")]
         gizmos.sphere(cast.point, Quat::IDENTITY, valid_radius, Color::RED); // Bounding sphere of valid ray normals
         for sample in samples {
             let Some((_, inter)) = ctx.cast_ray_and_get_normal(
@@ -749,6 +793,7 @@ impl<'c, 'f> GroundCastParams<'c, 'f> {
                 && inter.normal.length_squared() > 0.0
                 && inter.point.distance(cast.point) < valid_radius
             {
+                #[cfg(feature = "debug-lines")]
                 gizmos.ray(inter.point, inter.normal * 0.2, Color::RED);
                 sampled.push(inter.normal);
             }
@@ -762,6 +807,7 @@ impl<'c, 'f> GroundCastParams<'c, 'f> {
             weights += alignment;
         }
         let weighted_average = sum / weights;
+        #[cfg(feature = "debug-lines")]
         gizmos.ray(cast.point, weighted_average * 0.5, Color::MAROON);
 
         if weighted_average.length_squared() > 0.0 {
