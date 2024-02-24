@@ -106,6 +106,7 @@ impl Default for ForceSettings {
 }
 
 /// Add all forces together into a single force to be applied to the physics engine.
+#[allow(clippy::type_complexity)]
 pub fn accumulate_forces(
     globals: Query<&GlobalTransform>,
     masses: Query<&ReadMassProperties>,
@@ -153,7 +154,7 @@ pub fn accumulate_forces(
             };
 
             let ground_mass = if let Ok(mass) = masses.get(ground.entity) {
-                (**mass).clone()
+                **mass
             } else {
                 MassProperties::default()
             };

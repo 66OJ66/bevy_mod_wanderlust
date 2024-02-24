@@ -1,16 +1,15 @@
 //! A simple example of setting up a first-person character controlled player.
 
-use bevy::render::camera::Projection;
 use bevy::window::CursorGrabMode;
 use bevy::{
     input::mouse::MouseMotion,
     prelude::*,
     window::{Cursor, PrimaryWindow},
 };
+
 use bevy_framepace::{FramepacePlugin, FramepaceSettings, Limiter};
 use bevy_mod_wanderlust::{
-    ControllerBundle, ControllerInput, ControllerPhysicsBundle, RapierPhysicsBundle,
-    WanderlustPlugin,
+    ControllerBundle, ControllerInput, RapierPhysicsBundle, WanderlustPlugin,
 };
 use bevy_rapier3d::prelude::*;
 use std::f32::consts::FRAC_2_PI;
@@ -34,7 +33,7 @@ fn main() {
             // it's working again
             // RapierDebugRenderPlugin::default(),
             WanderlustPlugin::default(),
-            aether_spyglass::SpyglassPlugin,
+            //aether_spyglass::SpyglassPlugin,
             FramepacePlugin,
         ))
         .insert_resource(RapierConfiguration {
@@ -77,16 +76,12 @@ fn setup(
     mut meshes: ResMut<Assets<Mesh>>,
     mut mats: ResMut<Assets<StandardMaterial>>,
 ) {
-    let mesh = meshes.add(
-        shape::Capsule {
-            radius: 0.5,
-            depth: 1.0,
-            ..default()
-        }
-        .into(),
-    );
+    let mesh = meshes.add(Capsule3d {
+        radius: 0.5,
+        half_length: 1.0,
+    });
 
-    let material = mats.add(Color::WHITE.into());
+    let material = mats.add(StandardMaterial::from(Color::WHITE));
 
     commands
         .spawn((
@@ -127,7 +122,9 @@ fn setup(
                     PlayerCam,
                 ))
                 .with_children(|commands| {
-                    let mesh = meshes.add(shape::Cube { size: 0.5 }.into());
+                    let mesh = meshes.add(Cuboid {
+                        half_size: Vec3::splat(0.5),
+                    });
 
                     commands.spawn(PbrBundle {
                         mesh,
@@ -138,13 +135,9 @@ fn setup(
                 });
         });
 
-    let mesh = meshes.add(
-        shape::Plane {
-            size: 10.0,
-            ..default()
-        }
-        .into(),
-    );
+    let mesh = meshes.add(Cuboid {
+        half_size: Vec3::new(20.0, 0.1, 20.0),
+    });
 
     commands.spawn((
         PbrBundle {
@@ -163,17 +156,9 @@ fn setup(
     });
 
     let (hw, hh, hl) = (1.5, 0.5, 5.0);
-    let mesh = meshes.add(
-        shape::Box {
-            min_x: -hw,
-            max_x: hw,
-            min_y: -hh,
-            max_y: hh,
-            min_z: -hl,
-            max_z: hl,
-        }
-        .into(),
-    );
+    let mesh = meshes.add(Cuboid {
+        half_size: Vec3::new(hw, hh, hl),
+    });
 
     commands.spawn((
         PbrBundle {
@@ -192,17 +177,9 @@ fn setup(
     ));
 
     let (hw, hh, hl) = (0.25, 3.0, 5.0);
-    let mesh = meshes.add(
-        shape::Box {
-            min_x: -hw,
-            max_x: hw,
-            min_y: -hh,
-            max_y: hh,
-            min_z: -hl,
-            max_z: hl,
-        }
-        .into(),
-    );
+    let mesh = meshes.add(Cuboid {
+        half_size: Vec3::new(hw, hh, hl),
+    });
 
     commands.spawn((
         PbrBundle {
@@ -235,23 +212,23 @@ fn setup(
 fn movement_input(
     mut body: Query<&mut ControllerInput, With<PlayerBody>>,
     camera: Query<&GlobalTransform, (With<PlayerCam>, Without<PlayerBody>)>,
-    input: Res<Input<KeyCode>>,
+    input: Res<ButtonInput<KeyCode>>,
 ) {
     let tf = camera.single();
 
     let mut player_input = body.single_mut();
 
     let mut dir = Vec3::ZERO;
-    if input.pressed(KeyCode::A) {
+    if input.pressed(KeyCode::KeyA) {
         dir += -tf.right();
     }
-    if input.pressed(KeyCode::D) {
+    if input.pressed(KeyCode::KeyD) {
         dir += tf.right();
     }
-    if input.pressed(KeyCode::S) {
+    if input.pressed(KeyCode::KeyS) {
         dir += -tf.forward();
     }
-    if input.pressed(KeyCode::W) {
+    if input.pressed(KeyCode::KeyW) {
         dir += tf.forward();
     }
     dir.y = 0.0;
@@ -271,7 +248,7 @@ fn mouse_look(
 
     let sens = sensitivity.0;
 
-    let mut cumulative: Vec2 = -(input.iter().map(|motion| &motion.delta).sum::<Vec2>());
+    let mut cumulative: Vec2 = -(input.read().map(|motion| &motion.delta).sum::<Vec2>());
 
     // Vertical
     let rot = cam_tf.rotation;
@@ -295,7 +272,7 @@ fn mouse_look(
 }
 
 fn toggle_cursor_lock(
-    input: Res<Input<KeyCode>>,
+    input: Res<ButtonInput<KeyCode>>,
     mut windows: Query<&mut Window, With<PrimaryWindow>>,
 ) {
     if input.just_pressed(KeyCode::Escape) {

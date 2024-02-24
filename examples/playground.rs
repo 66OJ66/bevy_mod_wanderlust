@@ -65,7 +65,7 @@ fn main() {
         )
         .add_systems(
             Last,
-            |input: Res<Input<KeyCode>>,
+            |input: Res<ButtonInput<KeyCode>>,
              //mut freeze: ResMut<Freeze>,
              mut freeze: Local<bool>,
              mut time: ResMut<Time>,
@@ -104,7 +104,7 @@ fn main() {
         )
         .add_systems(
             Update,
-            |input: Res<Input<KeyCode>>, mut impulses: Query<&mut ExternalImpulse>| {
+            |input: Res<ButtonInput<KeyCode>>, mut impulses: Query<&mut ExternalImpulse>| {
                 if !input.just_pressed(KeyCode::P) {
                     return;
                 }
@@ -651,7 +651,7 @@ impl Default for Oscillator {
 }
 
 pub fn controlled_platform(
-    input: Res<Input<KeyCode>>,
+    input: Res<ButtonInput<KeyCode>>,
     mut controlled: Query<(&mut Velocity, &Controlled)>,
 ) {
     for (mut velocity, _) in &mut controlled {
@@ -683,7 +683,7 @@ pub fn oscillating(time: Res<Time>, mut oscillators: Query<(&mut Velocity, &Osci
 fn movement_input(
     mut body: Query<(&mut ControllerInput, &mut Movement), With<PlayerBody>>,
     camera: Query<&PlayerCam>,
-    input: Res<Input<KeyCode>>,
+    input: Res<ButtonInput<KeyCode>>,
 ) {
     let camera = camera.single();
     let camera_dir = Quat::from_rotation_y(camera.yaw);
@@ -747,7 +747,7 @@ fn mouse_look(
 }
 
 fn toggle_cursor_lock(
-    input: Res<Input<KeyCode>>,
+    input: Res<ButtonInput<KeyCode>>,
     mut windows: Query<&mut Window, With<PrimaryWindow>>,
 ) {
     if input.just_pressed(KeyCode::Escape) {

@@ -78,6 +78,7 @@ pub struct Ground {
 
 impl Ground {
     /// Construct a `Ground` based on the results of `GroundCastParams`.
+    #[allow(clippy::too_many_arguments)]
     pub fn from_cast(
         entity: Entity,
         cast: CastResult,
@@ -91,7 +92,7 @@ impl Ground {
         let ground_entity = ctx.collider_parent(entity).unwrap_or(entity);
 
         let mass = if let Ok(mass) = masses.get(ground_entity) {
-            (**mass).clone()
+            **mass
         } else {
             MassProperties::default()
         };
@@ -120,12 +121,12 @@ impl Ground {
 
         Ground {
             entity: ground_entity,
-            cast: cast,
-            stable: stable,
-            viable: viable,
+            cast,
+            stable,
+            viable,
             linear_velocity: ground_velocity.linvel,
             angular_velocity: ground_velocity.angvel,
-            point_velocity: point_velocity,
+            point_velocity,
         }
     }
 }
@@ -176,11 +177,8 @@ impl GroundCache {
 
     /// Archive this ground cast.
     pub fn into_last(&mut self) {
-        match self {
-            Self::Ground(ground) => {
-                *self = Self::Last(ground.clone());
-            }
-            _ => {}
+        if let Self::Ground(ground) = self {
+            *self = Self::Last(*ground);
         }
     }
 
@@ -217,6 +215,7 @@ pub struct GroundForce {
 }
 
 /// Performs groundcasting and updates controller state accordingly.
+#[allow(clippy::too_many_arguments)]
 pub fn find_ground(
     time: Res<Time>,
     mut casters: Query<(
@@ -259,16 +258,16 @@ pub fn find_ground(
                 position: cast_position,
                 rotation: cast_rotation,
                 direction: cast_direction,
-                shape: &shape,
+                shape,
                 max_toi: caster.cast_length,
-                filter: filter,
+                filter,
             };
 
             let mut any_params = viable_params.clone();
 
             let next_viable_ground = viable_params
                 .viable_cast_iters(
-                    &*ctx,
+                    &ctx,
                     &globals,
                     caster.max_ground_angle,
                     gravity.up_vector,
@@ -280,8 +279,8 @@ pub fn find_ground(
                         entity,
                         cast,
                         gravity.up_vector,
-                        &*caster,
-                        &*ctx,
+                        &caster,
+                        &ctx,
                         &masses,
                         &velocities,
                         &globals,
@@ -290,14 +289,14 @@ pub fn find_ground(
             viable_ground.update(next_viable_ground);
 
             let next_ground = any_params
-                .cast_iters(&*ctx, &globals, gravity.up_vector, 5, &mut gizmos)
+                .cast_iters(&ctx, &globals, gravity.up_vector, 5, &mut gizmos)
                 .map(|(entity, cast)| {
                     Ground::from_cast(
                         entity,
                         cast,
                         gravity.up_vector,
-                        &*caster,
-                        &*ctx,
+                        &caster,
+                        &ctx,
                         &masses,
                         &velocities,
                         &globals,
@@ -357,7 +356,7 @@ pub fn find_ground(
         */
 
         // If we hit something, just get back up instead of waiting.
-        if ctx.contacts_with(entity).next().is_some() {
+        if ctx.contact_pairs_with(entity).next().is_some() {
             caster.skip_ground_check_timer = 0.0;
         }
     }
@@ -486,7 +485,7 @@ pub fn contact_manifolds(
     ctx.query_pipeline
         .colliders_with_aabb_intersecting_aabb(&shape_aabb, |handle| {
             if let Some(collider) = ctx.colliders.get(*handle) {
-                if RapierContext::with_query_filter(&ctx, *filter, |rapier_filter| {
+                if RapierContext::with_query_filter(ctx, *filter, |rapier_filter| {
                     rapier_filter.test(&ctx.bodies, *handle, collider)
                 }) {
                     let mut new_manifolds = Vec::new();
@@ -586,16 +585,12 @@ impl<'c, 'f> GroundCastParams<'c, 'f> {
 
         let (entity, mut cast) = if let Some((entity, cast)) = self.cast_shape(ctx, gizmos) {
             (entity, cast)
+        } else if let Some((entity, cast)) = self.cast_ray(ctx) {
+            (entity, cast)
         } else {
-            if let Some((entity, cast)) = self.cast_ray(ctx) {
-                (entity, cast)
-            } else {
-                return None;
-            }
-        };
-        let Some(sampled_normal) = self.sample_normals(ctx, cast, up_vector, gizmos) else {
             return None;
         };
+        let sampled_normal = self.sample_normals(ctx, cast, up_vector, gizmos)?;
         cast.normal = sampled_normal;
 
         // Either none of the samples
@@ -615,9 +610,7 @@ impl<'c, 'f> GroundCastParams<'c, 'f> {
         max_angle: f32,
         gizmos: &mut Gizmos,
     ) -> Option<(Entity, CastResult)> {
-        let Some((entity, cast)) = self.cast(ctx, globals, up_vector, gizmos) else {
-            return None;
-        };
+        let (entity, cast) = self.cast(ctx, globals, up_vector, gizmos)?;
 
         if cast.viable(up_vector, max_angle) {
             Some((entity, cast))
@@ -652,7 +645,7 @@ impl<'c, 'f> GroundCastParams<'c, 'f> {
         ctx: &RapierContext,
         gizmos: &mut Gizmos,
     ) -> Option<(Entity, CastResult)> {
-        let Some((entity, toi)) = ctx.cast_shape(
+        let (entity, toi) = ctx.cast_shape(
             self.position,
             self.rotation,
             self.direction,
@@ -660,18 +653,14 @@ impl<'c, 'f> GroundCastParams<'c, 'f> {
             self.max_toi,
             true,
             self.filter,
-        ) else {
-            return None;
-        };
+        )?;
 
         if toi.toi <= std::f32::EPSILON {
             return None;
         }
 
         let (entity, cast) = (entity, CastResult::from_toi1(toi));
-        let Some(cast) = cast else {
-            return None;
-        };
+        let cast = cast?;
 
         gizmos.ray(self.position, self.direction * cast.toi, Color::BLUE);
         gizmos.sphere(

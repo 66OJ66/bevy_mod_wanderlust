@@ -108,7 +108,7 @@ fn setup(
 
 fn input(
     mut body: Query<(&mut ControllerInput, &GlobalTransform, &mut ExternalImpulse)>,
-    input: Res<Input<KeyCode>>,
+    input: Res<ButtonInput<KeyCode>>,
     mut mouse: EventReader<MouseMotion>,
     time: Res<Time>,
 ) {
@@ -153,7 +153,7 @@ fn input(
 }
 
 fn toggle_cursor_lock(
-    input: Res<Input<KeyCode>>,
+    input: Res<ButtonInput<KeyCode>>,
     mut windows: Query<&mut Window, With<PrimaryWindow>>,
 ) {
     if input.just_pressed(KeyCode::Escape) {

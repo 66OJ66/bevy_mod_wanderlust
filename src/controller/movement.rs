@@ -72,6 +72,7 @@ pub struct MovementForce {
 }
 
 /// Calculates the movement forces for this controller.
+#[allow(clippy::type_complexity)]
 pub fn movement_force(
     ctx: Res<RapierContext>,
     mut query: Query<(
@@ -108,7 +109,7 @@ pub fn movement_force(
         force.linear = Vec3::ZERO;
 
         let grounded = **grounded;
-        let force_scale = movement.force_scale(&gravity);
+        let force_scale = movement.force_scale(gravity);
 
         let input_dir = input.movement.clamp_length_max(1.0);
         let mut goal_vel = input_dir * movement.max_speed;
@@ -139,7 +140,7 @@ pub fn movement_force(
                 .unwrap_or(&GlobalTransform::IDENTITY);
 
             let ground_mass = if let Ok(mass) = masses.get(ground.entity) {
-                (**mass).clone()
+                **mass
             } else {
                 MassProperties::default()
             };
@@ -162,8 +163,7 @@ pub fn movement_force(
                     .get(ground.entity)
                     .copied()
                     .unwrap_or(Friction::default());
-                let friction_coefficient = friction.coefficient.max(ground_friction.coefficient);
-                friction_coefficient
+                friction.coefficient.max(ground_friction.coefficient)
             }
             _ => {
                 // Air damping coefficient
@@ -346,6 +346,7 @@ pub struct JumpForce {
 }
 
 /// Calculate the jump force for the controller.
+#[allow(clippy::type_complexity)]
 pub fn jump_force(
     mut query: Query<(
         &mut JumpForce,
