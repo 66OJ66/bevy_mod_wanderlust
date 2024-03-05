@@ -46,7 +46,7 @@ impl Default for WanderlustPlugin {
     fn default() -> Self {
         Self {
             tweaks: true,
-            schedule: PostUpdate.intern(),
+            schedule: FixedPostUpdate.intern(),
             default_system_setup: true,
         }
     }

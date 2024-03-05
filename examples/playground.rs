@@ -99,7 +99,7 @@ fn main() {
             ),
         )
         .add_systems(
-            PostUpdate,
+            FixedPostUpdate,
             mouse_look.before(bevy::transform::TransformSystem::TransformPropagate),
         )
         .add_systems(
