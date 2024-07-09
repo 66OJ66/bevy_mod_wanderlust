@@ -442,18 +442,18 @@ impl CastResult {
 
 impl CastResult {
     /// Use the first shape in the shape-cast as the cast result.
-    pub fn from_toi1(toi: Toi) -> Option<Self> {
+    pub fn from_toi1(toi: ShapeCastHit) -> Option<Self> {
         toi.details.map(|details| Self {
-            toi: toi.toi,
+            toi: toi.time_of_impact,
             normal: details.normal1,
             point: details.witness1,
         })
     }
 
     /// Use the second shape in the shape-cast as the cast result.
-    pub fn from_toi2(toi: Toi) -> Option<Self> {
+    pub fn from_toi2(toi: ShapeCastHit) -> Option<Self> {
         toi.details.map(|details| Self {
-            toi: toi.toi,
+            toi: toi.time_of_impact,
             normal: details.normal2,
             point: details.witness2,
         })
@@ -463,7 +463,7 @@ impl CastResult {
 impl From<RayIntersection> for CastResult {
     fn from(intersection: RayIntersection) -> Self {
         Self {
-            toi: intersection.toi,
+            toi: intersection.time_of_impact,
             normal: intersection.normal,
             point: intersection.point,
         }
@@ -478,11 +478,9 @@ pub fn contact_manifolds(
     collider: &Collider,
     filter: &QueryFilter,
 ) -> Vec<(Entity, ContactManifold)> {
-    let physics_scale = ctx.physics_scale();
-
     let shape = &collider.raw;
     let shape_iso = Isometry3 {
-        translation: (position * physics_scale).into(),
+        translation: position.into(),
         rotation: rotation.into(),
     };
 
@@ -685,12 +683,15 @@ impl<'c, 'f> GroundCastParams<'c, 'f> {
             self.rotation,
             self.direction,
             self.shape,
-            self.max_toi,
-            true,
+            ShapeCastOptions {
+                max_time_of_impact: self.max_toi,
+                stop_at_penetration: true,
+                ..default()
+            },
             self.filter,
         )?;
 
-        if toi.toi <= std::f32::EPSILON {
+        if toi.time_of_impact <= f32::EPSILON {
             return None;
         }
 
@@ -789,7 +790,7 @@ impl<'c, 'f> GroundCastParams<'c, 'f> {
                 continue;
             };
 
-            if inter.toi > 0.0
+            if inter.time_of_impact > 0.0
                 && inter.normal.length_squared() > 0.0
                 && inter.point.distance(cast.point) < valid_radius
             {
